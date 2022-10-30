@@ -1,15 +1,19 @@
 import argparse
 import numpy as np
 import cv2 as cv
-import time
+import datetime
+import sys
+import os
+import shutil
 
 class User:
-    def __init__(self, id, name, place, time):
+    def __init__(self, id, name, place, time, imagePathes):
         self.place = place
         self.name = name
         self.time = time
         self.id = id
-        self.face_feature = None        
+        self.face_features = None
+        self.imagePathes = imagePathes
 
 
 class Detector:
@@ -32,27 +36,63 @@ class Detector:
         self.scale = scale
         self.place = place
         self.users = dict()
+        self.lastUserID = 1
     
-    def addUser(self, name, imagePath):
+    def addUser(self, name, imagePathes):
         id = len(self.users)
-        user = User(id, name, self.place, None)
-        
-        frame = cv.imread(cv.samples.findFile(imagePath))
-        
-        frameWidth = int(frame.shape[1]*self.scale)
-        frameHeight = int(frame.shape[0]*self.scale)
-        frame = cv.resize(frame, (frameWidth, frameHeight))
-        
-        self.detector.setInputSize((frameWidth, frameHeight))
-        
-        faces = self.detector.detect(frame)
-        face = faces[1][0]
-        face_align = self.recognizer.alignCrop(frame, face)
-        face_feature = self.recognizer.feature(face_align)
-        
-        user.face_feature = face_feature
+        user = User(id, name, self.place, None, imagePathes)
+        face_features = []
+        for path in imagePathes:
+            frame = cv.imread(cv.samples.findFile(path))
+            
+            frameWidth = int(frame.shape[1]*self.scale)
+            frameHeight = int(frame.shape[0]*self.scale)
+            frame = cv.resize(frame, (frameWidth, frameHeight))
+            
+            self.detector.setInputSize((frameWidth, frameHeight))
+            
+            faces = self.detector.detect(frame)
+            face = faces[1][0]
+            face_align = self.recognizer.alignCrop(frame, face)
+            face_feature = self.recognizer.feature(face_align)
+            
+            face_features.append(face_feature)
+            
+        user.face_features = face_features
         
         self.users[id] = user
+        self.lastUserID += 1
+    
+    # 0 - No user with this ID, 1 - Name not changed, (str, str) - Sucess replaced, 2 - Replaced only name
+    def changeUser(self, oldId, newName):
+        oldId = int(oldId)
+        if oldId not in self.users:
+            raise "No user with this ID"
+        
+        oldUser = self.users[oldId]
+        
+        if oldUser.name == newName:
+            return 1
+        
+        for key, user in self.users.items():
+            if user.name == newName:
+                user.face_features += oldUser.face_features
+                newFolder = os.path.dirname(os.path.abspath(user.imagePathes[0]))
+                
+                for path in oldUser.imagePathes:
+                    oldFileName = os.path.basename(path)
+                    newPath = newFolder + "/" + oldUser.name + "-" + oldFileName
+                    
+                    print("from ", path, " to", newPath)
+                    shutil.copy(path, newPath)
+                    user.imagePathes.append(newPath)
+                    
+                # user.imagePathes += oldUser.imagePathes
+                del self.users[oldId]
+                return (oldUser.name, user.name)
+        
+        self.users[oldId].name = newName
+        return 2
     
     def detectUser(self, face, frame):
         face_align = self.recognizer.alignCrop(frame, face)
@@ -60,10 +100,11 @@ class Detector:
         cosine_similarity_threshold = 0.363       
          
         for key, user in self.users.items():
-            cosine_score = self.recognizer.match(face_feature, user.face_feature, cv.FaceRecognizerSF_FR_COSINE)
+            for face2_feature in user.face_features:
+                cosine_score = self.recognizer.match(face_feature, face2_feature, cv.FaceRecognizerSF_FR_COSINE)
             
-            if cosine_score >= cosine_similarity_threshold:
-                return key, face_feature
+                if cosine_score >= cosine_similarity_threshold:
+                    return key, face_feature
             
         return None, face_feature
     
@@ -79,7 +120,7 @@ class Detector:
             for idx, face in enumerate(faces[1]):
                 user = self.users[classes[idx]]
                 
-                print('Face {}, top-left coordinates: ({:.0f}, {:.0f}), box width: {:.0f}, box height {:.0f}, score: {:.2f} color {}'.format(idx, face[0], face[1], face[2], face[3], face[-1], classToColor[user.id % 6]))
+                # print('Face {}, top-left coordinates: ({:.0f}, {:.0f}), box width: {:.0f}, box height {:.0f}, score: {:.2f} color {}'.format(idx, face[0], face[1], face[2], face[3], face[-1], classToColor[user.id % 6]))
                 coords = face[:-1].astype(np.int32)
                 cv.rectangle(input, (coords[0], coords[1]), (coords[0]+coords[2], coords[1]+coords[3]), classToColor[user.id % 6], thickness)
                 cv.putText(input, user.name, (coords[0], coords[1]-10), cv.FONT_HERSHEY_SIMPLEX, 0.9, classToColor[user.id % 6], 2)
@@ -92,18 +133,21 @@ class Detector:
         cv.putText(input, 'FPS: {:.2f}'.format(12), (1, 16), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
     def detection(self):
-        print ("Getting cam", self.deviceId)
+        print ("Getting cam {}".format(self.deviceId))
+        sys.stdout.flush()
+        
         cap = cv.VideoCapture(self.deviceId)
         frameWidth = int(cap.get(cv.CAP_PROP_FRAME_WIDTH) * self.scale)
         frameHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT) * self.scale)
         self.detector.setInputSize([frameWidth, frameHeight])
         
-        print ("Starting detection")
+        print ("Starting detection", flush=True)
+        sys.stdout.flush()
 
         while True:
             hasFrame, frame = cap.read()
             if not hasFrame:
-                print('No frames grabbed!')
+                print('No frames grabbed!', flush=True)
                 break
             
             frame = cv.resize(frame, (frameWidth, frameHeight))
@@ -120,16 +164,23 @@ class Detector:
                 msg = 'the same identity'
                 if key is None or key not in self.users:
                     msg = 'different identities'
-                    key = len(self.users)
-                    newUser = User(key, "User {}".format(key), self.place, time.time())
-                    newUser.face_feature = face_feature
+                    key = self.lastUserID
+                    newName = "User {}".format(key)
                     
+                    path = "images/" + newName
+                    if not os.path.exists(path):
+                        os.mkdir(path)
+                    cv.imwrite(path + "/initial.jpg", frame)
+                    
+                    newUser = User(key, newName, self.place, datetime.datetime.now(), [path + "/initial.jpg"])
+                    newUser.face_features = [face_feature]
                     
                     self.users[key] = newUser
+                    self.lastUserID += 1
                 else:
                     self.users[key].place = self.place
-                    self.users[key].time = time.time()
-                    # print ("username", self.users[key].name, "new place is", self.users[key].place, "new time is ", self.users[key].time, " new len is", len(self.users), "lastSeen len", len(await self.lastSeen()))
+                    self.users[key].time = datetime.datetime.now()
+                    # print ("username", self.users[key].name, "new place is", self.users[key].place, "new time is ", self.users[key].time, " new len is", len(self.users), "lastSeen len", len(await self.lastSeen()), flush=True)
                     
                 colors.append(key)
 
@@ -139,5 +190,4 @@ class Detector:
         # cv.destroyAllWindows()
         
     def lastSeen(self):
-        print("users len is", len(self.users))
         return self.users
