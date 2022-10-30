@@ -43,7 +43,12 @@ class Detector:
         user = User(id, name, self.place, None, imagePathes)
         face_features = []
         for path in imagePathes:
-            frame = cv.imread(cv.samples.findFile(path))
+            print(path)
+            f = open(path, "rb")
+            chunk = f.read()
+            chunk_arr = np.frombuffer(chunk, dtype=np.uint8)
+            frame = cv.imdecode(chunk_arr, cv.IMREAD_COLOR)
+            # frame = cv.imread(cv.samples.findFile(path))
             
             frameWidth = int(frame.shape[1]*self.scale)
             frameHeight = int(frame.shape[0]*self.scale)
@@ -91,6 +96,27 @@ class Detector:
                 del self.users[oldId]
                 return (oldUser.name, user.name)
         
+        
+        oldFolder = os.path.dirname(os.path.abspath(oldUser.imagePathes[0]))
+        
+        newFolder = os.path.join(
+            os.path.abspath(os.path.join(oldFolder, os.pardir)),
+            newName
+        )
+        
+        os.rename(oldFolder, newFolder)
+        
+        oldPathes = self.users[oldId].imagePathes
+        self.users[oldId].imagePathes = []
+        
+        
+        for path in oldPathes:
+            oldFileName = os.path.basename(path)
+            
+            self.users[oldId].imagePathes.append(
+                os.path.join(newFolder, oldFileName)
+            )
+            
         self.users[oldId].name = newName
         return 2
     

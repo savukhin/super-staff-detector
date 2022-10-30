@@ -9,6 +9,7 @@ from multiprocessing import Process
 from threading import Thread
 from queue import Queue
 import sys
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--video', '-v', type=str, default=0, help='Path to the input video.')
@@ -33,9 +34,15 @@ detector10 = detector.Detector(
     place="10-ая аудитория"
 )
 
-detector10.addUser("Сава", ["images/Sava/1.png", "images/Sava/im1.jpg",
-                            "images/Sava/im2.jpg", "images/Sava/im3.jpg",
-                            "images/Sava/im4.jpg", "images/Sava/im5.jpg"])
+src = "images/"
+
+dirnames = [f for f in os.listdir(src) if os.path.isdir(os.path.join(src, f))]
+
+for directory in dirnames:
+    path = src + directory
+    onlyfiles = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+    
+    detector10.addUser(directory, onlyfiles)
 
 bot=telebot.TeleBot(token)
 
