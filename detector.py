@@ -88,7 +88,6 @@ class Detector:
                     oldFileName = os.path.basename(path)
                     newPath = newFolder + "/" + oldUser.name + "-" + oldFileName
                     
-                    print("from ", path, " to", newPath)
                     shutil.copy(path, newPath)
                     user.imagePathes.append(newPath)
                     

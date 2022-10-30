@@ -29,7 +29,7 @@ detector10 = detector.Detector(
     nms_threshold=args.nms_threshold,
     top_k=args.top_k,
     face_recognition_model=args.face_recognition_model,
-    deviceId=args.video,
+    deviceId="rtsp://10.164.2.174/live1.sdp",
     scale=args.scale,
     place="10-ая аудитория"
 )
