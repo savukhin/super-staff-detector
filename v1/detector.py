@@ -91,27 +91,24 @@ class Detector:
                 cv.circle(input, (coords[12], coords[13]), 2, (0, 255, 255), thickness)
         cv.putText(input, 'FPS: {:.2f}'.format(12), (1, 16), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-    def detection(self):
-        print ("Getting cam", self.deviceId)
+
+    def detection(self):        
         cap = cv.VideoCapture(self.deviceId)
         frameWidth = int(cap.get(cv.CAP_PROP_FRAME_WIDTH) * self.scale)
         frameHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT) * self.scale)
         self.detector.setInputSize([frameWidth, frameHeight])
-        
-        print ("Starting detection")
 
-        while True:
+        while cv.waitKey(1) < 0:
             hasFrame, frame = cap.read()
             if not hasFrame:
                 print('No frames grabbed!')
                 break
-            
             frame = cv.resize(frame, (frameWidth, frameHeight))
             faces = self.detector.detect(frame)
             colors = []
             
             if (faces[1] is None):
-                # cv.imshow('Live', frame)
+                cv.imshow('Live', frame)
                 continue
             
             for face in faces[1]:
@@ -129,15 +126,13 @@ class Detector:
                 else:
                     self.users[key].place = self.place
                     self.users[key].time = time.time()
-                    # print ("username", self.users[key].name, "new place is", self.users[key].place, "new time is ", self.users[key].time, " new len is", len(self.users), "lastSeen len", len(await self.lastSeen()))
                     
                 colors.append(key)
 
-            # self.visualize(frame, faces, colors)
-            # cv.imshow('Live', frame)
+            self.visualize(frame, faces, colors)
+            cv.imshow('Live', frame)
                     
-        # cv.destroyAllWindows()
+        cv.destroyAllWindows()
         
     def lastSeen(self):
-        print("users len is", len(self.users))
         return self.users

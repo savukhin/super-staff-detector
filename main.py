@@ -1,6 +1,12 @@
 import telebot
 import detector
 import argparse
+import time
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import Process
+from threading import Thread
+from queue import Queue
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--video', '-v', type=str, default=0, help='Path to the input video.')
@@ -35,16 +41,33 @@ def start_message(message):
 
 @bot.message_handler(commands=['check'])
 def check_message(message):
+    global detector10
+    
     msg = "В последний раз в 10-ой были замечены:\n"
     lastSeen = detector10.lastSeen()
-    print(lastSeen)
     for _, user in lastSeen.items():
-        print("USER IS", user)
         msg += "-{}: \n\tместо {} \n\tвремя {}".format(user.name, user.place, user.time)
     
-    print(msg)
     bot.send_message(message.chat.id, msg)
 
-print("Bot starting...")
-bot.polling()
-print("Bot started")
+def startTelegram():
+    print("Start telegram")
+    bot.polling()
+    
+def startDetector():
+    global detector10
+    print("Start Detector")
+    detector10.detection()
+
+
+
+thread1 = Thread( target=startDetector )
+thread2 = Thread( target=startTelegram )
+thread1.daemon = True
+thread2.daemon = True
+
+thread1.start()
+thread2.start()
+# thread1.join()
+# thread2.join()
+while True: time.sleep(100)
